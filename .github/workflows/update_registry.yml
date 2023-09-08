@@ -1,14 +1,39 @@
-name: Update vcpkg Registry
+name: Update VCPKG Registry
 
 on:
   repository_dispatch:
     types: [update-event]
+  workflow_dispatch:
+
+env:
+  VCPKG_COMMIT_ID: 095ee8757ec933b22d445738d2dbb1ce89bb8021
+  VCPKG_PORT_REPO: ${{ github.repository_owner }}
 
 jobs:
-  update-event:
-    runs-on: ubuntu-latest
+  update-registry:
+    runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup MSVC Environment
+        uses: ilammy/msvc-dev-cmd@v1.12.1
+        
+      - name: Setup VCPKG
+        uses: lukka/run-vcpkg@v11
         with:
-          sha: ${{ github.event.client_payload.sha }}
-      - run: # TODO: do stuff with sha
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+
+      - name: Update Registry
+        id: registry
+        shell: pwsh
+        run: "& ${{ github.workspace }}/.github/update-registry.ps1"
+
+      - name: Check for Commit
+        if: ${{ steps.registry.outputs.VCPKG_SUCCESS == 'true' }}
+        uses: EndBug/add-and-commit@v9
+        with:
+          author_name: vcpkg-action
+          message: "build: update registry"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

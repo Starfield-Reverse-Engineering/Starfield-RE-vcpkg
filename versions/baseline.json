@@ -1,5 +1,8 @@
 {
   "default": {
-    "commonlibsf": { "baseline": "2023-09-07", "port-version": 0 }
+    "commonlibsf": {
+      "baseline": "2023-09-07",
+      "port-version": 0
+    }
   }
 }
