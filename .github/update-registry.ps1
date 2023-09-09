@@ -196,9 +196,9 @@ vcpkg_from_github(
     }
     [IO.File]::WriteAllLines($manifests[5], $readme)
 
-    $yaml = [IO.File]::ReadAllLines($manifests[6])
-    $yaml = $yaml -replace "(?<=VCPKG_COMMIT_ID: ).*?(?=\s)", $latest.vcpkg.sha
-    [IO.File]::WriteAllLines($manifests[6], $yaml)
+    $yaml = [IO.File]::ReadAllText($manifests[6])
+    $yaml = $yaml -replace "(?<=VCPKG_COMMIT_ID: ).*?(?=\s)", $latest[0].sha
+    [IO.File]::WriteAllText($manifests[6], $yaml)
     Write-Host "...Ok"
 
 
