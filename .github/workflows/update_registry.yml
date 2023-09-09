@@ -16,9 +16,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       
-      - name: Setup MSVC Environment
-        uses: ilammy/msvc-dev-cmd@v1.12.1
-        
       - name: Setup VCPKG
         uses: lukka/run-vcpkg@v11
         with:
@@ -27,13 +24,13 @@ jobs:
       - name: Update Registry
         id: registry
         shell: pwsh
-        run: "& ${{ github.workspace }}/.github/update-registry.ps1"
+        run: "& ${{ github.workspace }}/.github/update-registry.ps1 ${{ github.event.client_payload.sha }}"
 
       - name: Check for Commit
-        if: ${{ steps.registry.outputs.VCPKG_SUCCESS == 'true' }}
+        if: ${{ steps.registry.outputs.VCPKG_SUCCESS }} == 'true'
         uses: EndBug/add-and-commit@v9
         with:
           author_name: vcpkg-action
-          message: "build: update registry"
+          message: "docs: update registry"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

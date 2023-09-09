@@ -36,7 +36,8 @@ try {
         "$repo/ports/commonlibsf/vcpkg.json",
         "$repo/versions/c-/commonlibsf.json",
         "$repo/versions/baseline.json",
-        "$repo/README.md"
+        "$repo/README.md",
+        "$PSScriptRoot/workflows/update_registry.yml"
     )
     
     Write-Host "Checking files..."
@@ -58,9 +59,15 @@ try {
     if ($ShaIn -eq 0) {
         throw "Invalid REF for main repo"
     }
+
+    # check REF collision
+    $portfile = [IO.File]::ReadAllText($manifests[1])
+    if ($portfile.Contains("REF $ShaIn")) {
+        throw "Existing REF for main repo, skipping action"
+    }
     Write-Host "...Upstream: $($env:VCPKG_PORT_REPO)`nREF: $($ShaIn)"
     
-    
+
     # calc hash
     Write-Host "Hashing tarball..."
     $uri = "https://github.com/$($env:VCPKG_PORT_REPO)/CommonLibSF/archive/$ShaIn.tar.gz"
@@ -115,6 +122,42 @@ vcpkg_from_github(
     Write-Host "...Ok"
 
 
+    # update version entries
+    Write-Host "Propagating version entry..."
+    $gitlog = & git config user.name "vcpkg-action"
+    $gitlog += & git config user.email "gottyduke@hotmail.com"
+    $gitlog += & git commit -am "port: check"
+    $tree = & git rev-parse HEAD:ports/commonlibsf
+    $gitlog += $tree
+
+    $entries = [IO.File]::ReadAllText($manifests[3]) | ConvertFrom-Json
+    # check entry collision
+    foreach ($entry in $entries.versions[$entries.versions.Length..0]) {
+        if ($entry.version.Contains($version)) {
+            Write-Host "Updating existing entry $version"
+            $version = if ($entry.version.Contains('.')) {
+                $identifiers = $entry.version.Split('.')
+                "$($identifiers[0]).$([Int32]$identifiers[1] + 1)"
+            }
+            else {
+                "$($entry.version).1"
+            }
+            break
+        }
+    }
+    if ([string]::IsNullOrEmpty($version)) {
+        throw "Failed to parse version-date"
+    }
+
+    Write-Host "Adding new entry $version"
+    $entry = '{ "version": "", "port-version": 0, "git-tree": "" }' | ConvertFrom-Json
+    $entry.version = $version
+    $entry.'git-tree' = $tree
+    $entries.versions += $entry
+    Out-Json $manifests[3] $entries
+    Write-Host "...Ok, git-tree set to $tree"
+
+
     # update baseline
     Write-Host "Updating baseline..."
     $baseline = [IO.File]::ReadAllText($manifests[4]) | ConvertFrom-Json
@@ -123,61 +166,39 @@ vcpkg_from_github(
     Write-Host "New baseline -> $version"
 
 
-    # update version entries
-    Write-Host "Propagating version entry..."
-    $gitlog = & git config user.name "vcpkg-action"
-    $gitlog += & git config user.email "gottyduke@hotmail.com"
-    $gitlog += & git add $manifests
-    $gitlog += & git commit -m "port: check"
-    $gitlog += & git rev-parse HEAD:ports/commonlibsf
-    $tree = & git rev-parse HEAD:ports/commonlibsf
-
-    $entries = [IO.File]::ReadAllText($manifests[3]) | ConvertFrom-Json
-    # check for collision
-    $collision = $false
-    foreach ($entry in $entries.versions) {
-        if ($entry.version -eq $version) {
-            Write-Host "Updating existing entry $version"
-            $entry.'git-tree' = $tree
-            $collision = $true
-            break
-        }
-    }
-    if (!$collision) {
-        Write-Host "Adding new entry $version"
-        $entry = '{ "version": "", "port-version": 0, "git-tree": "" }' | ConvertFrom-Json
-        $entry.version = $version
-        $entry.'git-tree' = $tree
-        $entries.versions += $entry
-    }
-    Out-Json $manifests[3] $entries
-    Write-Host "...Ok, git-tree set to $tree"
-
-
     # commit
     Write-Host "Committing vcpkg port..."
-    $gitlog += & git commit --amend -m "port: ``$version``"
+    $gitlog += & git commit --amend -am "port: ``$version``"
 
 
     # update docs
     Write-Host "Updating docs..."
     $readme = [IO.File]::ReadAllLines($manifests[5])
-    $vcpkg_latest = Get-Latest "https://github.com/microsoft/vcpkg"
-    $port_latest = & git rev-parse HEAD
+    $latest = @(
+        @{
+            uri = "https://github.com/microsoft/vcpkg"
+            sha = Get-Latest "https://github.com/microsoft/vcpkg"
+        },
+        @{
+            uri = "https://github.com/Starfield-Reverse-Engineering/Starfield-RE-vcpkg"
+            sha = & git rev-parse HEAD
+        }
+    )
     $readme = $readme -replace "(?<=label=vcpkg%20registry&message=).+?(?=&color)", $version
     for ($i = 0; $i -lt $readme.Length; $i = $i + 1) {
-        if ($readme[$i].Contains("https://github.com/microsoft/vcpkg")) {
-            $readme[$i + 1] = $readme[$i + 1] -replace '(?<="baseline": ").*?(?=")', $vcpkg_latest
-            $i = $i + 1
-            continue
-        }
-        if ($readme[$i].Contains("https://github.com/Starfield-Reverse-Engineering/Starfield-RE-vcpkg")) {
-            $readme[$i + 1] = $readme[$i + 1] -replace '(?<="baseline": ").*?(?=")', $port_latest
-            $i = $i + 1
-            continue
+        foreach ($replacer in $latest) {
+            if ($readme[$i].Contains($replacer.uri)) {
+                $readme[$i + 1] = $readme[$i + 1] -replace '(?<="baseline": ").*?(?=")', $replacer.sha
+                $i = $i + 1
+                continue
+            }
         }
     }
     [IO.File]::WriteAllLines($manifests[5], $readme)
+
+    $yaml = [IO.File]::ReadAllLines($manifests[6])
+    $yaml = $yaml -replace "(?<=VCPKG_COMMIT_ID: ).*?(?=\s)", $latest.vcpkg.sha
+    [IO.File]::WriteAllLines($manifests[6], $yaml)
     Write-Host "...Ok"
 
 
@@ -193,11 +214,11 @@ vcpkg_from_github(
         throw "Cannot commit action:`n$gitlog"
     }
 
-    Write-Output "::set-output name=VCPKG_SUCCESS::true"
+    Write-Output "VCPKG_SUCCESS=true" >> $env:GITHUB_OUTPUT
 }
 catch {
     Write-Error "...Failed: $_"
-    Write-Output "::set-output name=VCPKG_SUCCESS::false"
+    Write-Output "VCPKG_SUCCESS=false" >> $env:GITHUB_OUTPUT
 }
 finally {
     Pop-Location
