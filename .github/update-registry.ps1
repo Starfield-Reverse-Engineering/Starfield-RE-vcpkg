@@ -125,7 +125,7 @@ vcpkg_from_github(
     # update version entries
     Write-Host "Propagating version entry..."
     $gitlog = & git config user.name "vcpkg-action"
-    $gitlog += & git config user.email "gottyduke@hotmail.com"
+    $gitlog += & git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
     $gitlog += & git commit -am "port: check"
     $tree = & git rev-parse HEAD:ports/commonlibsf
     $gitlog += $tree
