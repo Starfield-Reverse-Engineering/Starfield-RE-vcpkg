@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 env:
-  VCPKG_COMMIT_ID: 095ee8757ec933b22d445738d2dbb1ce89bb8021
+  VCPKG_COMMIT_ID: 962e5e39f8a25f42522f51fffc574e05a3efd26b
   VCPKG_PORT_REPO: ${{ github.repository_owner }}
 
 jobs:
@@ -31,6 +31,6 @@ jobs:
         uses: EndBug/add-and-commit@v9
         with:
           author_name: vcpkg-action
-          message: "docs: update registry"
+          message: "chore: update registry"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
