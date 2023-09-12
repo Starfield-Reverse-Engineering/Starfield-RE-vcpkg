@@ -15,7 +15,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      
+        with:
+          token: ${{ secrets.VCPKG_HELPER_TOKEN }}
+
       - name: Setup VCPKG
         uses: lukka/run-vcpkg@v11
         with:
